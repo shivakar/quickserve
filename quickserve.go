@@ -151,6 +151,8 @@ func AuthenticationMiddleware(next http.Handler, c *Config) http.Handler {
 					creds[1] != c.Password {
 					Error.Printf("Authorization failed for user '%s'\n",
 						creds[0])
+					w.Header().Set("WWW-Authenticate",
+						"Basic realm=\"quickserve - Invalid credentials. Try again.\"")
 					http.Error(w, "Authorization failed",
 						http.StatusUnauthorized)
 					return
@@ -158,7 +160,8 @@ func AuthenticationMiddleware(next http.Handler, c *Config) http.Handler {
 			} else {
 				w.Header().Set("WWW-Authenticate",
 					"Basic realm=\"quickserve\"")
-				http.Error(w, http.StatusText(401), 401)
+				http.Error(w, http.StatusText(http.StatusUnauthorized),
+					http.StatusUnauthorized)
 			}
 			next.ServeHTTP(w, r)
 		})
