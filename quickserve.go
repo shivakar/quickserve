@@ -105,8 +105,13 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 		func(w http.ResponseWriter, r *http.Request) {
 			t := time.Now()
 
-			Info.Printf("%s - - [%s] \"%s %s %s\"\n",
+			u, _, ok := r.BasicAuth()
+			if !ok {
+				u = "-"
+			}
+			Info.Printf("%s - %s [%s] \"%s %s %s\"\n",
 				r.RemoteAddr,
+				u,
 				t.Format("02/Jan/2006:15:04:05 -0700"),
 				r.Method,
 				r.URL.Path,
@@ -129,6 +134,7 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 }
 
 // AuthenticationMiddleware adds Basic HTTP Auth
+// TODO: Redo Authentication Middleware using Request.BasicAuth
 func AuthenticationMiddleware(next http.Handler, c *Config) http.Handler {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
