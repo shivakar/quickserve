@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -134,40 +133,24 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 }
 
 // AuthenticationMiddleware adds Basic HTTP Auth
-// TODO: Redo Authentication Middleware using Request.BasicAuth
 func AuthenticationMiddleware(next http.Handler, c *Config) http.Handler {
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
-			authHdr := r.Header["Authorization"]
-			if len(authHdr) > 0 {
-				authInfo := strings.Split(authHdr[0], " ")
-				if len(authInfo) != 2 || authInfo[0] != "Basic" {
-					Error.Printf("Invalid Auth Syntax: %s\n", authHdr)
-					http.Error(w, "Invalid Auth Syntax", http.StatusBadRequest)
-					return
-				}
-				credentials, err := base64.StdEncoding.DecodeString(authInfo[1])
-				if err != nil {
-					Error.Printf("Invalid Auth Data: %s\n", authInfo[1])
-					http.Error(w, "Invalid Auth Data", http.StatusBadRequest)
-					return
-				}
-				creds := strings.Split(string(credentials), ":")
-				if len(creds) != 2 || creds[0] != c.Username ||
-					creds[1] != c.Password {
-					Error.Printf("Authorization failed for user '%s'\n",
-						creds[0])
-					w.Header().Set("WWW-Authenticate",
-						"Basic realm=\"quickserve - Invalid credentials. Try again.\"")
-					http.Error(w, "Authorization failed",
-						http.StatusUnauthorized)
-					return
-				}
-			} else {
-				w.Header().Set("WWW-Authenticate",
-					"Basic realm=\"quickserve\"")
+			w.Header().Set("WWW-Authenticate", `Basic realm="quickserve"`)
+
+			username, password, ok := r.BasicAuth()
+			if !ok {
 				http.Error(w, http.StatusText(http.StatusUnauthorized),
 					http.StatusUnauthorized)
+				return
+			}
+			if username != c.Username || password != c.Password {
+				Error.Printf("Authorization failed for user '%s'\n", username)
+				w.Header().Set("WWW-Authenticate",
+					`Basic realm="quickserve - Invalid credentials. Try again."`)
+				http.Error(w, http.StatusText(http.StatusUnauthorized),
+					http.StatusUnauthorized)
+				return
 			}
 			next.ServeHTTP(w, r)
 		})
