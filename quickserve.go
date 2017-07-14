@@ -22,6 +22,9 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/microcosm-cc/bluemonday"
+	"github.com/russross/blackfriday"
 )
 
 var (
@@ -63,6 +66,7 @@ type Config struct {
 	CertFile  string
 	KeyFile   string
 	Cert      tls.Certificate
+	Markdown  bool
 }
 
 // Print the current config
@@ -196,8 +200,35 @@ func IndexHandler(dirs []string, prefix string) http.Handler {
 	return http.HandlerFunc(ih)
 }
 
+// MarkdownHandler intercepts requests for a markdown file and render the markdown instead
+func MarkdownHandler(next http.Handler, c *Config) http.Handler {
+	return http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			ext := filepath.Ext(r.RequestURI)
+			switch ext {
+			case ".md", ".markdown":
+				filename := strings.Replace(r.RequestURI, c.Prefix, "", 1)
+				input, err := ioutil.ReadFile(filename)
+				if err != nil {
+					http.Error(w, "Error opening markdown file.",
+						http.StatusInternalServerError)
+				}
+				unsafe := blackfriday.MarkdownCommon(input)
+				html := bluemonday.UGCPolicy().SanitizeBytes(unsafe)
+				w.Write(html)
+				return
+			default:
+				next.ServeHTTP(w, r)
+			}
+		})
+}
+
 func chainMiddleware(h http.Handler, c *Config) http.Handler {
-	middleware := LoggingMiddleware(h)
+	middleware := h
+	if c.Markdown {
+		middleware = MarkdownHandler(h, c)
+	}
+	middleware = LoggingMiddleware(middleware)
 	if c.BasicAuth {
 		middleware = AuthenticationMiddleware(middleware, c)
 	}
@@ -366,6 +397,7 @@ func initConfig(config *Config) {
 		"Private key file for TLS server.\n\tImplies '-tls' option.\n"+
 			"\tAlso needs matching Certificate file from '-certFile' option.")
 	flag.BoolVar(&printVersion, "version", false, "Show Version Information")
+	flag.BoolVar(&config.Markdown, "markdown", true, "Render Markdown files")
 
 	// Parse command line flags
 	flag.Parse()

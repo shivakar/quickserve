@@ -35,32 +35,34 @@ Available options:
 ```
 Usage of quickserve:
   -auth
-    	Enable Basic Authentication
+        Enable Basic Authentication
   -certFile string
-    	Certificate file for TLS server.
-	    Implies '-tls' option.
-	    Also needs matching KeyFile from '-keyFile' option.
+        Certificate file for TLS server.
+        Implies '-tls' option.
+        Also needs matching KeyFile from '-keyFile' option.
   -interface string
-    	Interface to serve on (default "127.0.0.1")
+        Interface to serve on (default "127.0.0.1")
   -keyFile string
-    	Private key file for TLS server.
-	    Implies '-tls' option.
-	    Also needs matching Certificate file from '-certFile' option.
+        Private key file for TLS server.
+        Implies '-tls' option.
+        Also needs matching Certificate file from '-certFile' option.
+  -markdown
+        Render Markdown files (default true)
   -password string
-    	Password for Basic Authentication (default "qspassword")
+        Password for Basic Authentication (default "qspassword")
   -port string
-    	Port to serve on (default "8080")
+        Port to serve on (default "8080")
   -prefix string
-    	Absolute path to serve on (default "/")
+        Absolute path to serve on (default "/")
   -tls
-    	Start TLS server.
-   	    Uses files provided with '-certFile' and '-keyFile' options
-	    to start the server. If no files are provided, generates an
-	    in-memory keypair for the server. (default true)
+        Start TLS server.
+        Uses files provided with '-certFile' and '-keyFile' options
+        to start the server. If no files are provided, generates an
+        in-memory keypair for the server. (default true)
   -username string
-    	Username for Basic Authentication (default "qsuser")
+        Username for Basic Authentication (default "qsuser")
   -version
-    	Show Version Information
+        Show Version Information
 ```
 
 
