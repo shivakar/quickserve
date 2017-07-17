@@ -16,6 +16,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"os"
 	"path"
 	"path/filepath"
@@ -121,15 +122,15 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 				r.Proto)
 
 			if r.Method == "POST" {
-				Info.Printf("Request HEADER:\n\t%s\n",
-					r.Header)
-				out, err := ioutil.ReadAll(r.Body)
+				b, err := httputil.DumpRequest(r, true)
 				if err != nil {
 					Error.Println(err)
+				} else {
+					// Adding a tab to all lines of the request dump
+					bstr := fmt.Sprintf("\t%s", strings.Replace(string(b),
+						"\n", "\n\t", -1))
+					Info.Printf("Request:\n%s", bstr)
 				}
-				r.ParseForm()
-				Info.Printf("Request POST data:\n\t%s\n\t%s\n",
-					string(out), r.Form)
 			}
 
 			next.ServeHTTP(w, r)
@@ -455,7 +456,7 @@ func initConfig(config *Config) {
 }
 
 func main() {
-	Version = "0.2.0"
+	Version = "0.3.0"
 	Init(os.Stdout, os.Stdout, os.Stdout, os.Stderr)
 
 	// Create new config
