@@ -1,6 +1,8 @@
 package main
 
 import (
+	"compress/gzip"
+	"compress/zlib"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -21,11 +23,19 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/russross/blackfriday"
+)
+
+const (
+	EncodingUnknown  = ""
+	EncodingIdentity = "identity"
+	EncodingGzip     = "gzip"
+	EncodingZlib     = "deflate"
 )
 
 var (
@@ -234,7 +244,7 @@ func chainMiddleware(h http.Handler, c *Config) http.Handler {
 		middleware = AuthenticationMiddleware(middleware, c)
 	}
 
-	return middleware
+	return compressionMiddleware(middleware)
 }
 
 // GenX509KeyPair generates the TLS keypair
@@ -253,8 +263,8 @@ func GenX509KeyPair() (tls.Certificate, error) {
 		SubjectKeyId: []byte{113, 117, 105, 99, 107, 115, 101, 114,
 			118, 101},
 		BasicConstraintsValid: true,
-		IsCA:        true,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IsCA:                  true,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		KeyUsage: x509.KeyUsageKeyEncipherment |
 			x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 	}
@@ -320,6 +330,106 @@ func ListenAndServeTLSKeyPair(addr string, cert tls.Certificate,
 		config)
 
 	return server.Serve(tlsListener)
+}
+
+// compressedResponseWriter wraps http.ResponseWriter and io.Writer such that we
+// can overwrite the Write and WriteHeader functions to ensure that the proper
+// response headers are set for the given content encoding
+type compressedResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+}
+
+func (w *compressedResponseWriter) WriteHeader(status int) {
+	w.Header().Del("Content-Length")
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *compressedResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+// compressionMiddleware serves and compresses the response content if requested by the client
+func compressionMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accept := strings.ToLower(r.Header.Get("Accept-Encoding"))
+		encoding := useEncoding(accept)
+		if encoding == EncodingUnknown {
+			w.WriteHeader(http.StatusNotAcceptable)
+			return
+		}
+		if encoding == EncodingIdentity {
+			// no compression
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		var enc io.WriteCloser
+		switch encoding {
+		case EncodingGzip:
+			enc = gzip.NewWriter(w)
+		case EncodingZlib:
+			enc = zlib.NewWriter(w)
+		}
+		defer enc.Close()
+
+		w.Header().Set("Content-Encoding", encoding)
+		next.ServeHTTP(&compressedResponseWriter{
+			ResponseWriter: w,
+			Writer:         enc,
+		}, r)
+	})
+}
+
+// useEncoding parses the Accept-Encoding header and determines
+// which Content-Encoding with which to respond
+func useEncoding(accept string) string {
+	encodings := strings.Split(accept, ",")
+
+	// sanitize
+	for i, enc := range encodings {
+		encodings[i] = strings.TrimSpace(enc)
+	}
+
+	encoding := EncodingIdentity
+	highestPriority := 0.0
+	for _, enc := range encodings {
+		if enc == "" {
+			continue
+		}
+
+		spl := strings.Split(enc, ";")
+		if len(spl) > 2 {
+			return EncodingUnknown
+		}
+
+		priority := 1.0
+		if len(spl) == 2 {
+			pStr := strings.TrimPrefix(spl[1], "q=")
+			p, err := strconv.ParseFloat(pStr, 32)
+			if err != nil || p < 0 || p > 1 {
+				// invalid priority
+				return EncodingUnknown
+			}
+			priority = p
+		}
+
+		if priority > highestPriority {
+			highestPriority = priority
+			var e string
+			switch strings.ToLower(spl[0]) {
+			case "identity":
+				e = EncodingIdentity
+			case "gzip":
+				e = EncodingGzip
+			case "deflate":
+				e = EncodingZlib
+			}
+			encoding = e
+		}
+	}
+
+	return encoding
 }
 
 // Serve starts the file server

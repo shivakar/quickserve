@@ -20,6 +20,7 @@ Make sure you have `$GOPATH/bin` added to your `$PATH` environment variable.
 * Basic Authentication
 * Serve over HTTPS (default)
 * Handle (log) POST requests for quick debugging
+* gzip and deflate (zlib) compression via the Accept-Encoding header
 
 ## Usage
 
